@@ -90,6 +90,8 @@ class CalendarCore:
         list containing VEvents
     fail: int
         how many objects failed to load (won't check if initialization is a list)
+    location: str
+        location of the file being read if applicable
     """
 
     def __init__(self, package: typing.Union[str, list]):
@@ -104,11 +106,13 @@ class CalendarCore:
         """
         self.file = None
         self.fail = 0
+        self.location = ""
         if isinstance(package, list):
             self.data = package
         else:
             self.data = []
             self.read_file(package)
+            self.location = package
 
     def __del__(self):
         """
@@ -116,6 +120,23 @@ class CalendarCore:
         """
         if self.file:
             self.file.close()
+
+    def __str__(self):
+        """
+        Overrides the default "to string" of python object
+
+        Returns
+        -------
+        str
+            String conversion of the class
+        """
+        ret = "BEGIN:VCALENDAR\nPRODID:-//Team Oak Tree Flakes//Event Planner v0.1//EN\nVERSION:2.0\n\n"
+
+        for i in self.data:
+            ret += f"{i}\n"
+
+        ret += "END:VCALENDAR\n"
+        return ret
 
     def read_file(self, file: str):
         """
@@ -159,3 +180,29 @@ class CalendarCore:
             if i == "END:VCALENDAR":
                 # EOF indicator
                 break
+
+    def write_file(self, file: str = None):
+        """
+        Method to save class content to opened file or the passed in file location
+
+        Parameters
+        ----------
+        file: str
+            place to save the file to
+
+        Raises
+        ------
+        ValueError
+            if there is no location to write to
+        """
+        if not self.file and not file:
+            raise ValueError("Nothing to write to")
+
+        if self.file:
+            self.file.close()
+
+        self.location = self.location if not file else file
+        self.file = open(self.location, mode="w")
+        self.file.write(self.__str__())
+        self.file.close()
+        self.file = open(self.location)

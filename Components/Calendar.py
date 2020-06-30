@@ -29,7 +29,8 @@ class VEvent:
         """
         self.data = {}
         for key, value in pack.items():
-            if key.startswith("DT") and value.endswith("Z"):
+
+            if isinstance(value, str) and key.startswith("DT") and value.endswith("Z"):
                 self.data[key] = pytz.utc.localize(datetime.datetime.strptime(value, "%Y%m%dT%H%M%SZ"))
             else:
                 self.data[key] = value

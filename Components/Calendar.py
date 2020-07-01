@@ -30,8 +30,13 @@ class VEvent:
         self.data = {}
         for key, value in pack.items():
 
-            if isinstance(value, str) and key.startswith("DT") and value.endswith("Z"):
-                self.data[key] = pytz.utc.localize(datetime.datetime.strptime(value, "%Y%m%dT%H%M%SZ"))
+            if isinstance(value, str):
+                if key.startswith("DT") and value.endswith("Z"):
+                    self.data[key] = pytz.utc.localize(datetime.datetime.strptime(value, "%Y%m%dT%H%M%SZ"))
+                elif key == "LOCATION":
+                    self.data[key] = value.replace("\,", ",")
+                else:
+                    self.data[key] = value
             else:
                 self.data[key] = value
 
@@ -69,6 +74,8 @@ class VEvent:
         for k, v in self.data.items():
             if k.startswith("DT"):
                 v = v.strftime("%Y%m%dT%H%M%SZ")
+            elif k == "LOCATION":
+                v = v.replace(",", "\,")
             ret += f"{k}:{v}\n"
         ret += "END:VEVENT\n"
 

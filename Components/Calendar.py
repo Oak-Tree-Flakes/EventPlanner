@@ -111,7 +111,16 @@ class CalendarCore:
         package: typing.Union[str, list]
             if package is string, class will attempt to open the string as a file specification and scan it
             if package is list, it will be appended to data
+
+        Raises
+        ------
+        TypeError
+            if the passed in package string for the file location isn't supported
         """
+        if isinstance(package, str):
+            if not package.endswith(".ics"):
+                raise TypeError("Unsupported file format")
+
         self.file = None
         self.fail = 0
         self.location = ""
@@ -126,8 +135,11 @@ class CalendarCore:
         """
         Destructor of the CalendarCore class to close any lingering file the class have opened
         """
-        if self.file:
-            self.file.close()
+        try:
+            if self.file:
+                self.file.close()
+        except AttributeError:
+            pass
 
     def __str__(self):
         """

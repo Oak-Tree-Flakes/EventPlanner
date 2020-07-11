@@ -41,7 +41,10 @@ class VEvent:
                 self.data[key] = value
 
         if not self.check():
-            raise TypeError("Illegal VEvent")
+            raise TypeError("Illegal VEvent: Missing required entry")
+
+        if self.data["DTSTART"] > self.data["DTEND"]:
+            raise AssertionError("Event end time can not be before the event start time")
 
     def check(self):
         """
@@ -150,7 +153,7 @@ class CalendarCore:
         str
             String conversion of the class
         """
-        ret = "BEGIN:VCALENDAR\nPRODID:-//Team Oak Tree Flakes//Event Planner v0.1//EN\nVERSION:2.0\n\n"
+        ret = "BEGIN:VCALENDAR\nPRODID:-//Team Oak Tree Flakes//Event Planner v0.2//EN\nVERSION:2.0\n\n"
 
         for i in self.data:
             ret += f"{i}\n"

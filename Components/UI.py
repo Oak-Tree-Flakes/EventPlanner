@@ -25,6 +25,8 @@ class Interface:
         self.newEvent = Button(self.background, padx=2, pady=2, command=self.add_window, text="New Event")
         self.openFile.grid(row=0, column=0)
         self.newEvent.grid(row=1, column=0)
+        self.saveButton = Button(self.background, padx=18, pady=2, command=self.save_file, text="Save")
+        self.saveButton.grid(row=2, column=0)
 
         self.root.mainloop()
 
@@ -48,7 +50,7 @@ class Interface:
             self.details.destroy()
 
         self.details = Label(self.background, text=temp, fg="white", bg="black", justify=LEFT)
-        self.details.grid(row=2, column=1)
+        self.details.grid(row=3, column=1)
 
     def add_window(self):
         # Build looks
@@ -143,3 +145,19 @@ class Interface:
             self.reload_display()
 
         Button(bg2, padx=10, pady=0, command=try_create, text="Create").grid(row=5, column=0)
+
+    def save_file(self):
+        if not self.core:
+            return messagebox.showerror("No Data Error", "There is no event in the system to save")
+
+        if self.location == "":
+            self.location = filedialog.asksaveasfilename(initialdir="./", title="Select Save Location",
+                                                         filetypes=(("Calendar File", "*.ics"), ("All Files", "*.*")))
+            if self.location == "":
+                return
+            if not self.location.endswith(".ics"):
+                self.location += ".ics"
+        if self.location != "":
+            self.core.write_file(self.location)
+
+        messagebox.showinfo("Success!", f"Calendar data has been saved to:\n{self.location}")

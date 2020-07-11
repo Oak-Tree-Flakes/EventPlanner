@@ -79,7 +79,7 @@ class Interface:
             OptionMenu(hold, temp, *twenty_four).grid(row=0, column=3)
 
             sixty = []
-            for i in range(0, 61):
+            for i in range(0, 60):
                 sixty.append(i)
             temp = IntVar(hold)
             temp.set(0)

@@ -67,31 +67,24 @@ class Interface:
             hold.grid(row=row, column=0, padx=10, pady=5)
             Label(hold, text='Date', background="#f1c40f").grid(row=0, column=0)
             ret = [DateEntry(hold, width=8, borderwidth=2, background="#f1c40f")]
-
-            twenty_four = []
-            for i in range(0, 24):
-                twenty_four.append(i)
             ret[0].grid(row=0, column=1, pady=6)
-            temp = IntVar(hold)
-            temp.set(start)
-            ret.append(temp)
+
             Label(hold, text='Hour', background="#00cec9").grid(row=0, column=2)
-            OptionMenu(hold, temp, *twenty_four).grid(row=0, column=3)
-
-            sixty = []
-            for i in range(0, 60):
-                sixty.append(i)
-            temp = IntVar(hold)
-            temp.set(0)
+            default = IntVar(hold)
+            default.set(start)
+            temp = Spinbox(hold, from_=0, to=23, width=4, textvariable=default)
             ret.append(temp)
+            ret[1].grid(row=0, column=3)
+
             Label(hold, text='Minutes', background="#00cec9").grid(row=0, column=4)
-            OptionMenu(hold, temp, *sixty).grid(row=0, column=5)
-
-            temp = IntVar(hold)
-            temp.set(0)
+            temp = Spinbox(hold, from_=0, to=59, width=4)
             ret.append(temp)
+            ret[2].grid(row=0, column=5)
+
             Label(hold, text='Seconds', background="#00cec9").grid(row=0, column=6)
-            OptionMenu(hold, temp, *sixty).grid(row=0, column=7)
+            temp = Spinbox(hold, from_=0, to=59, width=4)
+            ret.append(temp)
+            ret[3].grid(row=0, column=7)
 
             return ret
 
@@ -117,16 +110,22 @@ class Interface:
         location_data.grid(row=0, column=1)
 
         def to_datetime(arr: list):
-            ret = datetime.datetime.combine(arr[0].get_date(), datetime.time(arr[1].get(), arr[2].get(), arr[3].get()))
+            ret = datetime.datetime.combine(arr[0].get_date(),
+                                            datetime.time(int(arr[1].get()), int(arr[2].get()), int(arr[3].get())))
             # https://stackoverflow.com/questions/2720319/python-figure-out-local-timezone
             local_zone = datetime.datetime.now().astimezone().tzinfo
             ret = ret.astimezone(local_zone)
             return ret.astimezone(pytz.utc)
 
         def try_create():
-            feed = {"SUMMARY": name_data.get(), "LOCATION": location_data.get(),
-                    "DTSTART": to_datetime(before_data), "DTEND": to_datetime(after_data),
-                    "DESCRIPTION": info_data.get("1.0", END)}
+            try:
+                feed = {"SUMMARY": name_data.get(), "LOCATION": location_data.get(),
+                        "DTSTART": to_datetime(before_data), "DTEND": to_datetime(after_data),
+                        "DESCRIPTION": info_data.get("1.0", END)}
+            except ValueError:
+                return messagebox.showerror("Failed to Create Event",
+                                            "Please check your input, it's beyond acceptable number range")
+
             try:
                 temp = VEvent(feed)
             except TypeError:

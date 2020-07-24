@@ -3,6 +3,13 @@ import typing
 import datetime
 
 
+def dt_with_id(data: list):
+    temp = data[0].split("=")
+    timezone = pytz.timezone(temp[1])
+    time = timezone.localize(datetime.datetime.strptime(data[1], "%Y%m%dT%H%M%S"))
+    return time.astimezone(pytz.UTC)
+
+
 class VEvent:
     """
     VEvent class aim to represent VEVENT within ICS files
@@ -11,6 +18,8 @@ class VEvent:
     ----------
     data: dict
         dictionary storing data for an VEvent Object
+    recur: bool
+        whether or not the Event is a recurrence one
     """
 
     def __init__(self, pack: dict):
@@ -28,15 +37,20 @@ class VEvent:
             if dictionary from parameter don't contain enough data
         """
         self.data = {}
+        self.recur = False
         for key, value in pack.items():
 
             if isinstance(value, str):
-                if key.startswith("DT") and value.endswith("Z"):
-                    self.data[key] = pytz.utc.localize(datetime.datetime.strptime(value, "%Y%m%dT%H%M%SZ"))
+                if key.startswith("DT"):
+                    if value.endswith("Z"):
+                        self.data[key] = pytz.utc.localize(datetime.datetime.strptime(value, "%Y%m%dT%H%M%SZ"))
                 elif key == "LOCATION":
                     self.data[key] = value.replace("\,", ",")
                 else:
                     self.data[key] = value
+            elif isinstance(value, list):
+                self.data[key] = dt_with_id(value)
+                self.recur = True
             else:
                 self.data[key] = value
 
@@ -79,7 +93,9 @@ class VEvent:
                 v = v.strftime("%Y%m%dT%H%M%SZ")
             elif k == "LOCATION":
                 v = v.replace(",", "\,")
-            ret += f"{k}:{v}\n"
+
+            if v not in ["", "\n"]:
+                ret += f"{k}:{v}\n"
         ret += "END:VEVENT\n"
 
         return ret
@@ -196,9 +212,13 @@ class CalendarCore:
                     read_event = False
                 elif read_event and i not in ["", "BEGIN:VEVENT"]:
                     # only executes if the line isn't empty and after BEGIN:VEVENT
-                    if i.find(":") != -1:
-                        temp = i.split(':')
-                        temp_event[temp[0]] = temp[1]
+                    if not (i.startswith("DT") and i.find(";") != -1):
+                        if i.find(":") != -1:
+                            temp = i.split(':')
+                            temp_event[temp[0]] = temp[1]
+                    else:
+                        temp = i.split(';')
+                        temp_event[temp[0]] = temp[1].split(":")
 
             if i == "END:VCALENDAR":
                 # EOF indicator

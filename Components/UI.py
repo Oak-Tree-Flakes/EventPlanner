@@ -9,6 +9,28 @@ from tkinter import filedialog, messagebox, font
 core = None
 
 
+def to_datetime(arr: iter):
+    """
+    Function to generate a UTC datetime from list of user input options
+
+    Parameters
+    ----------
+    arr: iter
+        list of inputs from user (tk)
+
+    Returns
+    -------
+    datetime
+        UTC datetime from the user
+    """
+    ret = datetime.datetime.combine(arr[0].get_date(),
+                                    datetime.time(int(arr[1].get()), int(arr[2].get()), int(arr[3].get())))
+    # https://stackoverflow.com/questions/2720319/python-figure-out-local-timezone
+    local_zone = datetime.datetime.now().astimezone().tzinfo
+    ret = ret.replace(tzinfo=local_zone)
+    return ret.astimezone(pytz.utc)
+
+
 class Interface:
     """
     Interface class responsible for interactive GUI
@@ -51,7 +73,7 @@ class Interface:
         menu_bar.add_cascade(label="File", menu=file_sub_menu)
 
         edit_sub_menu = Menu(menu_bar, tearoff=0)
-        edit_sub_menu.add_command(label="New Event", command=EventUI(self.reload_display).generate)
+        edit_sub_menu.add_command(label="New Event", command=EventUI(self.root, self.reload_display).generate)
 
         menu_bar.add_cascade(label="Edit", menu=edit_sub_menu)
 
@@ -90,6 +112,7 @@ class Interface:
             core.write_file(self.location)
 
         messagebox.showinfo("Success!", f"Calendar data has been saved to:\n{self.location}")
+        self.reload_display()
 
     def get_file(self):
         """
@@ -126,11 +149,14 @@ class Interface:
 
 
 class EventUI:
-    def __init__(self, reload: classmethod, exist_data: VEvent = None):
+    def __init__(self, previous: Tk, reload: classmethod, exist_data: VEvent = None, key: int = None):
+        self.key = key
         self.font_family = "Open Sans"
         self.data = {} if not exist_data else exist_data
         self.root = None
+        self.previous = previous
         self.reload = reload
+        self.bg = "#2bcbba"
 
     def build_datetime_selector(self, root, row: int, title: str, start: int = 6):
         """
@@ -153,7 +179,7 @@ class EventUI:
             returns list of TK input in the format of [DateEntry, Spinbox...]
         """
         # responsible for creating time selector sections
-        hold = LabelFrame(root, text=title, background="#2bcbba",
+        hold = LabelFrame(root, text=title, background=self.bg,
                           font=font.Font(family=self.font_family, size=12, weight=font.BOLD))
         hold.grid(row=row, column=0, padx=10, pady=5)
         Label(hold, text='Date', background="#f1c40f").grid(row=0, column=0)
@@ -179,28 +205,6 @@ class EventUI:
 
         return ret
 
-    @staticmethod
-    def to_datetime(arr: iter):
-        """
-        Method to generate a UTC datetime from list of user input options
-
-        Parameters
-        ----------
-        arr: iter
-            list of inputs from user (tk)
-
-        Returns
-        -------
-        datetime
-            UTC datetime from the user
-        """
-        ret = datetime.datetime.combine(arr[0].get_date(),
-                                        datetime.time(int(arr[1].get()), int(arr[2].get()), int(arr[3].get())))
-        # https://stackoverflow.com/questions/2720319/python-figure-out-local-timezone
-        local_zone = datetime.datetime.now().astimezone().tzinfo
-        ret = ret.astimezone(local_zone)
-        return ret.astimezone(pytz.utc)
-
     def try_create(self):
         """
         Method that will try generate a new VEvent data from user inputs
@@ -214,11 +218,16 @@ class EventUI:
             return
 
         global core
+        feed = {}
 
         try:
-            feed = {"SUMMARY": self.data["name"].get(), "LOCATION": self.data["location"].get(),
-                    "DTSTART": self.to_datetime(self.data["before"]), "DTEND": self.to_datetime(self.data["after"]),
-                    "DESCRIPTION": self.data["info"].get("1.0", END)}
+            for k, v in self.data.items():
+                if k.startswith("DT"):
+                    feed[k] = to_datetime(v)
+                elif k == "DESCRIPTION":
+                    feed[k] = v.get("1.0", END)
+                else:
+                    feed[k] = v.get()
         except ValueError:
             return messagebox.showerror("Failed to Create Event",
                                         "Please check your input, it's beyond acceptable number range")
@@ -241,40 +250,71 @@ class EventUI:
         messagebox.showinfo("Successfully Created Event", f"{feed['SUMMARY']} has been successfully created")
         self.reload()
 
-        # TODO: when implementing edit event, make sure command isn't linked to try_create
-
     def generate(self):
-        # TODO: when implementing edit event, change values within the user input boxes (there is a lot)
         # Build window appearance
-        self.root = Toplevel(self.root)
+        self.root = Toplevel(self.previous)
         self.root.title("Add New Event" if not isinstance(self.data, VEvent) else "Edit Event")
         self.root.grab_set()
         self.root.minsize(width=415, height=600)
-        bg2 = Frame(self.root, bg="#2bcbba")
+        bg2 = Frame(self.root, bg=self.bg)
         bg2.place(relwidth=1, relheight=1)
-
-        name_label = LabelFrame(bg2, text="Event Name *", background="#2bcbba",
+        # ------------------------------------------------------------------------------------------------
+        name_label = LabelFrame(bg2, text="Event Name *", background=self.bg,
                                 font=font.Font(family=self.font_family, size=12, weight=font.BOLD))
         name_label.grid(row=0, column=0, sticky=W, padx=10)
-        self.data["name"] = Entry(name_label, width=64)
-        self.data["name"].grid(row=0, column=1)
-
-        self.data["before"] = self.build_datetime_selector(bg2, 1, "Start Date and Time *")
-        self.data["after"] = self.build_datetime_selector(bg2, 2, "End Data and Time *", 9)
-
-        info_label = LabelFrame(bg2, text="Event Information", background="#2bcbba",
-                                font=font.Font(family=self.font_family, size=12, weight=font.BOLD))
-        info_label.grid(row=3, column=0, sticky=W, padx=10)
-        self.data["info"] = Text(info_label, width=48, height=10)
-        self.data["info"].grid(row=0, column=1)
-
-        location_label = LabelFrame(bg2, text="Event Location", background="#2bcbba",
+        self.data["SUMMARY"] = Entry(name_label, width=64)
+        self.data["SUMMARY"].grid(row=0, column=1)
+        # ------------------------------------------------------------------------------------------------
+        self.data["DTSTART"] = self.build_datetime_selector(bg2, 1, "Start Date and Time *", 8)
+        self.data["DTEND"] = self.build_datetime_selector(bg2, 2, "End Data and Time *", 10)
+        # ------------------------------------------------------------------------------------------------
+        class_label = LabelFrame(bg2, text="Event Type", background=self.bg,
+                                 font=font.Font(family=self.font_family, size=12, weight=font.BOLD))
+        class_label.grid(row=3, column=0, sticky=W, padx=10)
+        self.data["CLASS"] = StringVar()
+        self.data["CLASS"].set("PRIVATE")
+        i = 0
+        for a, b in [("Private", "PRIVATE"), ("Confidential", "CONFIDENTIAL"), ("Public", "PUBLIC")]:
+            Radiobutton(class_label, text=a, value=b, variable=self.data["CLASS"], bg=self.bg,
+                        activebackground=self.bg).grid(column=i, row=0, padx=28)
+            i += 1
+        # ------------------------------------------------------------------------------------------------
+        priority_label = LabelFrame(bg2, text="Event Priority", background=self.bg,
                                     font=font.Font(family=self.font_family, size=12, weight=font.BOLD))
-        location_label.grid(row=4, column=0, sticky=W, padx=10)
-        self.data["location"] = Entry(location_label, width=64)
-        self.data["location"].grid(row=0, column=1)
-
-        # TODO: when implementing edit event, make sure command isn't linked to try_create
-
+        priority_label.grid(row=4, column=0, sticky=W, padx=10)
+        self.data["PRIORITY"] = IntVar()
+        self.data["PRIORITY"].set(0)
+        i = 0
+        for a, b in [("Low", 0), ("Normal", 1), ("High", 2)]:
+            Radiobutton(priority_label, text=a, value=b, variable=self.data["PRIORITY"], bg=self.bg,
+                        activebackground=self.bg).grid(column=i, row=0, padx=35)
+            i += 1
+        # ------------------------------------------------------------------------------------------------
+        self.data["STATUS"] = StringVar()
+        self.data["STATUS"].set("CONFIRMED")
+        status_label = LabelFrame(bg2, text="Event Status", background=self.bg,
+                                  font=font.Font(family=self.font_family, size=12, weight=font.BOLD))
+        status_label.grid(row=5, column=0, sticky=W, padx=10)
+        i = 0
+        for a, b in [("Confirmed", "CONFIRMED"), ("Tentative", "TENTATIVE"), ("Cancelled", "CANCELLED")]:
+            Radiobutton(status_label, text=a, value=b, variable=self.data["STATUS"], bg=self.bg,
+                        activebackground=self.bg).grid(column=i, row=0, padx=24, pady=2)
+            i += 1
+        # ------------------------------------------------------------------------------------------------
+        location_label = LabelFrame(bg2, text="Location", background=self.bg,
+                                    font=font.Font(family=self.font_family, size=12, weight=font.BOLD))
+        location_label.grid(row=6, column=0, sticky=W, padx=10)
+        self.data["LOCATION"] = Entry(location_label, width=64)
+        self.data["LOCATION"].grid(row=0, column=1)
+        # ------------------------------------------------------------------------------------------------
+        info_label = LabelFrame(bg2, text="Description", background=self.bg,
+                                font=font.Font(family=self.font_family, size=12, weight=font.BOLD))
+        info_label.grid(row=7, column=0, sticky=W, padx=10)
+        self.data["DESCRIPTION"] = Text(info_label, width=48, height=10)
+        self.data["DESCRIPTION"].grid(row=0, column=1)
+        # ------------------------------------------------------------------------------------------------
         if not isinstance(self.data, VEvent):
-            Button(bg2, padx=10, pady=0, command=self.try_create, text="Create").grid(row=5, column=0)
+            Button(bg2, padx=10, pady=0, command=self.try_create, text="Create").grid(row=8, column=0)
+        # TODO: update button
+
+    # TODO: when implementing edit event, change values within the user input boxes (there is a lot)

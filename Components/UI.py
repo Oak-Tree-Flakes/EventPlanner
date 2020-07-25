@@ -1,9 +1,9 @@
-import pytz
 import datetime
 from tkinter import *
 from tkcalendar import DateEntry
 from Components.Calendar import CalendarCore, VEvent
 from tkinter import filedialog, messagebox, font
+from tzlocal import get_localzone
 
 
 core = None
@@ -21,14 +21,31 @@ def to_datetime(arr: iter):
     Returns
     -------
     datetime
-        UTC datetime from the user
+        local datetime from the user
     """
     ret = datetime.datetime.combine(arr[0].get_date(),
                                     datetime.time(int(arr[1].get()), int(arr[2].get()), int(arr[3].get())))
-    # https://stackoverflow.com/questions/2720319/python-figure-out-local-timezone
-    local_zone = datetime.datetime.now().astimezone().tzinfo
-    ret = ret.replace(tzinfo=local_zone)
-    return ret.astimezone(pytz.utc)
+    return get_localzone().localize(ret)
+
+
+def date_and_time_inputs(frame: LabelFrame, row: int, hour: int):
+    Label(frame, text='Date', background="#f1c40f").grid(row=row, column=0)
+    ret = [DateEntry(frame, width=10, borderwidth=2, background="#f1c40f")]
+    ret[0].grid(row=row, column=1, pady=6)
+
+    Label(frame, text='Hour', background="#00cec9").grid(row=row, column=2)
+    ret.append(IntVar(frame, value=hour))
+    Spinbox(frame, from_=0, to=23, width=6, textvariable=ret[1]).grid(row=row, column=3)
+
+    Label(frame, text='Minutes', background="#00cec9").grid(row=row, column=4)
+    ret.append(IntVar(frame))
+    Spinbox(frame, from_=0, to=59, width=6, textvariable=ret[2]).grid(row=row, column=5)
+
+    Label(frame, text='Seconds', background="#00cec9").grid(row=row, column=6)
+    ret.append(IntVar(frame))
+    Spinbox(frame, from_=0, to=59, width=6, textvariable=ret[3]).grid(row=row, column=7)
+
+    return ret
 
 
 class Interface:
@@ -152,20 +169,23 @@ class EventUI:
     def __init__(self, previous: Tk, reload: classmethod, exist_data: VEvent = None, key: int = None):
         self.key = key
         self.font_family = "Open Sans"
-        self.data = {} if not exist_data else exist_data
+        self.event_ref = exist_data
+        self.inputs = {}
+        self.rrule = {}
+        self.rrule_end_mode = IntVar(value=0)
         self.root = None
         self.previous = previous
         self.reload = reload
         self.bg = "#2bcbba"
+        self.rec_label = None
+        self.bgf = None
 
-    def build_datetime_selector(self, root, row: int, title: str, start: int = 6):
+    def build_datetime_selector(self, row: int, title: str, start: int = 6):
         """
         Generate label containing datetime input detectors base on passed information from the parameter
 
         Parameters
         ----------
-        root
-            previous "node" for the system to append itself to
         row: int
             row number for the grid position of the root
         title: str
@@ -179,29 +199,10 @@ class EventUI:
             returns list of TK input in the format of [DateEntry, Spinbox...]
         """
         # responsible for creating time selector sections
-        hold = LabelFrame(root, text=title, background=self.bg,
+        hold = LabelFrame(self.bgf, text=title, background=self.bg,
                           font=font.Font(family=self.font_family, size=12, weight=font.BOLD))
         hold.grid(row=row, column=0, padx=10, pady=5)
-        Label(hold, text='Date', background="#f1c40f").grid(row=0, column=0)
-        ret = [DateEntry(hold, width=8, borderwidth=2, background="#f1c40f")]
-        ret[0].grid(row=0, column=1, pady=6)
-
-        Label(hold, text='Hour', background="#00cec9").grid(row=0, column=2)
-        default = IntVar(hold)
-        default.set(start)
-        temp = Spinbox(hold, from_=0, to=23, width=6, textvariable=default)
-        ret.append(temp)
-        ret[1].grid(row=0, column=3)
-
-        Label(hold, text='Minutes', background="#00cec9").grid(row=0, column=4)
-        temp = Spinbox(hold, from_=0, to=59, width=6)
-        ret.append(temp)
-        ret[2].grid(row=0, column=5)
-
-        Label(hold, text='Seconds', background="#00cec9").grid(row=0, column=6)
-        temp = Spinbox(hold, from_=0, to=59, width=6)
-        ret.append(temp)
-        ret[3].grid(row=0, column=7)
+        ret = date_and_time_inputs(hold, 0, start)
 
         return ret
 
@@ -214,14 +215,14 @@ class EventUI:
         messagebox
             if there is error
         """
-        if isinstance(self.data, VEvent):
+        if isinstance(self.inputs, VEvent):
             return
 
         global core
         feed = {}
 
         try:
-            for k, v in self.data.items():
+            for k, v in self.inputs.items():
                 if k.startswith("DT"):
                     feed[k] = to_datetime(v)
                 elif k == "DESCRIPTION":
@@ -231,6 +232,36 @@ class EventUI:
         except ValueError:
             return messagebox.showerror("Failed to Create Event",
                                         "Please check your input, it's beyond acceptable number range")
+
+        if self.rrule["FREQ"].get() != "NEVER":
+            check = self.rrule["FREQ"].get()
+            append = [f"FREQ={check}"]
+            if self.rrule["INTERVAL"].get() > 1:
+                append.append(f"INTERVAL={self.rrule['INTERVAL'].get()}")
+
+            if check == "WEEKLY":
+                temporary = []
+                for k, v in self.rrule["BYDAY"].items():
+                    if v.get() == 1:
+                        temporary.append(k)
+                if len(temporary) == 0:
+                    return messagebox.showerror("Failed to Create Event", "For recurring weekly type event, "
+                                                                          "make sure at least one weekday is selected")
+                part = ",".join(temporary)
+                append.append(f"BYDAY={part}")
+            if check in ["MONTHLY, YEARLY"]:
+                append.append(f"BYMONTHDAY={self.rrule['BYMONTHDAY']}")
+                if check == "YEARLY":
+                    append.append(f"BYMONTH={self.rrule['BYMONTH']}")
+
+            check2 = self.rrule_end_mode.get()
+            if check2 == 1:
+                append.append(f"COUNT={self.rrule['COUNT'].get()}")
+            if check2 == 2:
+                temp = self.rrule["UNTIL"].get().replace("/", "")
+                append.append(f"UNTIL={temp}")
+
+            feed["RRULE"] = ";".join(append)
 
         try:
             temp = VEvent(feed)
@@ -250,71 +281,154 @@ class EventUI:
         messagebox.showinfo("Successfully Created Event", f"{feed['SUMMARY']} has been successfully created")
         self.reload()
 
+    def preset(self):
+        # TODO process VEvent file
+        self.inputs["SUMMARY"] = StringVar(value="New Event")
+        self.inputs["CLASS"] = StringVar(value="PRIVATE")
+        self.inputs["PRIORITY"] = IntVar(value=0)
+        self.inputs["STATUS"] = StringVar(value="CONFIRMED")
+        self.inputs["LOCATION"] = StringVar()
+
+        self.rrule["FREQ"] = StringVar(value="NEVER")
+        self.rrule["INTERVAL"] = IntVar(value=1)
+        self.rrule["BYDAY"] = {}
+        for i in ["SU", "MO", "TU", "WE", "TH", "FR", "SA"]:
+            self.rrule["BYDAY"][i] = IntVar()
+        self.rrule["COUNT"] = IntVar(value=1)
+        self.rrule["BYMONTHDAY"] = datetime.datetime.now().day
+        self.rrule["BYMONTH"] = datetime.datetime.now().month
+        self.rrule["UNTIL"] = StringVar(value=datetime.datetime.now().strftime("%Y/%m/%d"))
+
     def generate(self):
+        self.preset()
         # Build window appearance
         self.root = Toplevel(self.previous)
-        self.root.title("Add New Event" if not isinstance(self.data, VEvent) else "Edit Event")
+        self.root.title("Add New Event" if not isinstance(self.inputs, VEvent) else "Edit Event")
         self.root.grab_set()
-        self.root.minsize(width=415, height=600)
-        bg2 = Frame(self.root, bg=self.bg)
-        bg2.place(relwidth=1, relheight=1)
+        self.root.minsize(width=430, height=730)
+        self.bgf = Frame(self.root, bg=self.bg)
+        self.bgf.place(relwidth=1, relheight=1)
         # ------------------------------------------------------------------------------------------------
-        name_label = LabelFrame(bg2, text="Event Name *", background=self.bg,
+        name_label = LabelFrame(self.bgf, text="Event Name *", background=self.bg,
                                 font=font.Font(family=self.font_family, size=12, weight=font.BOLD))
         name_label.grid(row=0, column=0, sticky=W, padx=10)
-        self.data["SUMMARY"] = Entry(name_label, width=64)
-        self.data["SUMMARY"].grid(row=0, column=1)
+        Entry(name_label, width=66, textvariable=self.inputs["SUMMARY"]).grid(row=0, column=1)
         # ------------------------------------------------------------------------------------------------
-        self.data["DTSTART"] = self.build_datetime_selector(bg2, 1, "Start Date and Time *", 8)
-        self.data["DTEND"] = self.build_datetime_selector(bg2, 2, "End Data and Time *", 10)
+        self.inputs["DTSTART"] = self.build_datetime_selector(1, "Start Date and Time *", 8)
+        self.inputs["DTEND"] = self.build_datetime_selector(2, "End Data and Time *", 10)
         # ------------------------------------------------------------------------------------------------
-        class_label = LabelFrame(bg2, text="Event Type", background=self.bg,
+        ref_frame = LabelFrame(self.bgf, text="Recurrence", background=self.bg, font=font.Font(
+            family="Open Sans", size=12, weight=font.BOLD))
+        ref_frame.grid(row=3, column=0, sticky=W, padx=10)
+        select_frame = Frame(ref_frame, bg=self.bg)
+        select_frame.grid(row=0, column=0)
+        i = 0
+        for a, b in [("Never", "NEVER"), ("Hourly", "HOURLY"), ("Daily", "DAILY"), ("Weekly", "WEEKLY"),
+                     ("Monthly", "MONTHLY"), ("Yearly", "YEARLY")]:
+            Radiobutton(select_frame, text=a, value=b, variable=self.rrule["FREQ"], bg=self.bg,
+                        activebackground=self.bg, command=self.update_recur_display).grid(column=i, row=0, padx=2)
+            i += 1
+        self.rec_label = Frame(ref_frame, bg=self.bg)
+        self.rec_label.grid(row=1, column=0)
+        # ------------------------------------------------------------------------------------------------
+        class_label = LabelFrame(self.bgf, text="Event Type", background=self.bg,
                                  font=font.Font(family=self.font_family, size=12, weight=font.BOLD))
-        class_label.grid(row=3, column=0, sticky=W, padx=10)
-        self.data["CLASS"] = StringVar()
-        self.data["CLASS"].set("PRIVATE")
+        class_label.grid(row=4, column=0, sticky=W, padx=10)
         i = 0
         for a, b in [("Private", "PRIVATE"), ("Confidential", "CONFIDENTIAL"), ("Public", "PUBLIC")]:
-            Radiobutton(class_label, text=a, value=b, variable=self.data["CLASS"], bg=self.bg,
-                        activebackground=self.bg).grid(column=i, row=0, padx=28)
+            Radiobutton(class_label, text=a, value=b, variable=self.inputs["CLASS"], bg=self.bg,
+                        activebackground=self.bg).grid(column=i, row=0, padx=30)
             i += 1
         # ------------------------------------------------------------------------------------------------
-        priority_label = LabelFrame(bg2, text="Event Priority", background=self.bg,
+        priority_label = LabelFrame(self.bgf, text="Event Priority", background=self.bg,
                                     font=font.Font(family=self.font_family, size=12, weight=font.BOLD))
-        priority_label.grid(row=4, column=0, sticky=W, padx=10)
-        self.data["PRIORITY"] = IntVar()
-        self.data["PRIORITY"].set(0)
+        priority_label.grid(row=5, column=0, sticky=W, padx=12)
         i = 0
         for a, b in [("Low", 0), ("Normal", 1), ("High", 2)]:
-            Radiobutton(priority_label, text=a, value=b, variable=self.data["PRIORITY"], bg=self.bg,
-                        activebackground=self.bg).grid(column=i, row=0, padx=35)
+            Radiobutton(priority_label, text=a, value=b, variable=self.inputs["PRIORITY"], bg=self.bg,
+                        activebackground=self.bg).grid(column=i, row=0, padx=37)
             i += 1
         # ------------------------------------------------------------------------------------------------
-        self.data["STATUS"] = StringVar()
-        self.data["STATUS"].set("CONFIRMED")
-        status_label = LabelFrame(bg2, text="Event Status", background=self.bg,
+        status_label = LabelFrame(self.bgf, text="Event Status", background=self.bg,
                                   font=font.Font(family=self.font_family, size=12, weight=font.BOLD))
-        status_label.grid(row=5, column=0, sticky=W, padx=10)
+        status_label.grid(row=6, column=0, sticky=W, padx=10)
         i = 0
         for a, b in [("Confirmed", "CONFIRMED"), ("Tentative", "TENTATIVE"), ("Cancelled", "CANCELLED")]:
-            Radiobutton(status_label, text=a, value=b, variable=self.data["STATUS"], bg=self.bg,
-                        activebackground=self.bg).grid(column=i, row=0, padx=24, pady=2)
+            Radiobutton(status_label, text=a, value=b, variable=self.inputs["STATUS"], bg=self.bg,
+                        activebackground=self.bg).grid(column=i, row=0, padx=26, pady=2)
             i += 1
         # ------------------------------------------------------------------------------------------------
-        location_label = LabelFrame(bg2, text="Location", background=self.bg,
+        location_label = LabelFrame(self.bgf, text="Location", background=self.bg,
                                     font=font.Font(family=self.font_family, size=12, weight=font.BOLD))
-        location_label.grid(row=6, column=0, sticky=W, padx=10)
-        self.data["LOCATION"] = Entry(location_label, width=64)
-        self.data["LOCATION"].grid(row=0, column=1)
+        location_label.grid(row=7, column=0, sticky=W, padx=10)
+        Entry(location_label, width=66, textvariable=self.inputs["LOCATION"]).grid(row=0, column=1)
         # ------------------------------------------------------------------------------------------------
-        info_label = LabelFrame(bg2, text="Description", background=self.bg,
+        info_label = LabelFrame(self.bgf, text="Description", background=self.bg,
                                 font=font.Font(family=self.font_family, size=12, weight=font.BOLD))
-        info_label.grid(row=7, column=0, sticky=W, padx=10)
-        self.data["DESCRIPTION"] = Text(info_label, width=48, height=10)
-        self.data["DESCRIPTION"].grid(row=0, column=1)
+        info_label.grid(row=8, column=0, sticky=W, padx=10)
+        self.inputs["DESCRIPTION"] = Text(info_label, width=50, height=10)
+        self.inputs["DESCRIPTION"].grid(row=0, column=1)
         # ------------------------------------------------------------------------------------------------
-        if not isinstance(self.data, VEvent):
-            Button(bg2, padx=10, pady=0, command=self.try_create, text="Create").grid(row=8, column=0)
-        # TODO: update button
+        if not isinstance(self.inputs, VEvent):
+            Button(self.bgf, padx=10, pady=0, command=self.try_create, text="Create").grid(row=9, column=0)
+        # TODO: when implementing edit event, change values within the user input boxes (there is a lot)
 
-    # TODO: when implementing edit event, change values within the user input boxes (there is a lot)
+    def update_recur_display(self):
+        if not self.rec_label:
+            return
+
+        guide = self.rrule["FREQ"].get()
+
+        temp = self.rec_label.master
+        self.rec_label.destroy()
+        self.rec_label = Frame(temp, bg=self.bg)
+        self.rec_label.grid(row=1, column=0)
+
+        if guide == "NEVER":
+            return
+
+        grid1 = Frame(self.rec_label, bg=self.bg)
+        grid1.grid(row=0, column=0)
+        Label(grid1, text='Repeat Every ', background=self.bg).grid(row=0, column=0)
+        Spinbox(grid1, from_=1, to=2000000000, width=6,
+                textvariable=self.rrule["INTERVAL"]).grid(row=0, column=1)
+        translate = str(guide).lower()[:-2] + "(s)" if guide != "DAILY" else "day(s)"
+        Label(grid1, text=f" {translate}", background=self.bg).grid(row=0, column=2)
+
+        if guide == "WEEKLY":
+            grid2 = Frame(self.rec_label, bg=self.bg)
+            grid2.grid(row=1, column=0)
+            i = 1
+            Label(grid2, text='*Repeat on:', background=self.bg).grid(row=1, column=0)
+            for a, b in [("Sun", "SU"), ("Mon", "MO"), ("Tue", "TU"), ("Wed", "WE"), ("Thu", "TH"), ("Fri", "FR"),
+                         ("Sat", "SA")]:
+                Checkbutton(grid2, text=a, variable=self.rrule["BYDAY"][b],
+                            bg=self.bg, activebackground=self.bg).grid(row=1, column=i)
+                i += 1
+
+        grid3 = Frame(self.rec_label, bg=self.bg)
+        grid3.grid(row=2, column=0)
+        Label(grid3, text='Ends:', background=self.bg).grid(row=0, column=0)
+        note = []
+
+        def change():
+            for item in note:
+                item.destroy()
+            note.clear()
+
+            if self.rrule_end_mode.get() == 1:
+                note.append(Spinbox(grid3, from_=1, to=2000000000, width=6, textvariable=self.rrule["COUNT"]))
+                note[0].grid(row=0, column=i)
+                note.append(Label(grid3, background=self.bg, text=" Time(s)"))
+                note[1].grid(column=i + 1, row=0)
+            if self.rrule_end_mode.get() == 2:
+                note.append(DateEntry(grid3, width=10, borderwidth=2, background="#f1c40f",
+                                      date_pattern='y/mm/dd', textvariable=self.rrule["UNTIL"]))
+                note[0].grid(row=0, column=i)
+
+        i = 1
+        for a, b in [("Never", 0), ("After", 1), ("On", 2)]:
+            Radiobutton(grid3, text=a, value=b, variable=self.rrule_end_mode, bg=self.bg, command=change,
+                        activebackground=self.bg).grid(column=i, row=0)
+            i += 1
+        change()

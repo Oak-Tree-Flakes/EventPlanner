@@ -1,13 +1,9 @@
 import pytz
 import typing
 import datetime
+from tzlocal import get_localzone
 
-
-def dt_with_id(data: list):
-    temp = data[0].split("=")
-    timezone = pytz.timezone(temp[1])
-    time = timezone.localize(datetime.datetime.strptime(data[1], "%Y%m%dT%H%M%S"))
-    return time.astimezone(pytz.UTC)
+file_tz = get_localzone()
 
 
 class VEvent:
@@ -43,15 +39,17 @@ class VEvent:
             if isinstance(value, str):
                 if key.startswith("DT"):
                     if value.endswith("Z"):
-                        self.data[key] = pytz.utc.localize(datetime.datetime.strptime(value, "%Y%m%dT%H%M%SZ"))
+                        self.data[key] = pytz.UTC.localize(datetime.datetime.strptime(value, "%Y%m%dT%H%M%SZ"))
+                    else:
+                        global file_tz
+                        self.data[key] = file_tz.localize(datetime.datetime.strptime(value, "%Y%m%dT%H%M%S"))
                 elif key == "LOCATION":
                     self.data[key] = value.replace("\,", ",")
                 else:
                     self.data[key] = value
-            elif isinstance(value, list):
-                self.data[key] = dt_with_id(value)
-                self.recur = True
             else:
+                if key == "RRULE":
+                    self.recur = True
                 self.data[key] = value
 
         if not self.check():
@@ -90,7 +88,7 @@ class VEvent:
         ret = "BEGIN:VEVENT\n"
         for k, v in self.data.items():
             if k.startswith("DT"):
-                v = v.strftime("%Y%m%dT%H%M%SZ")
+                v = v.strftime("%Y%m%dT%H%M%SZ" if v.tzinfo == pytz.UTC else "%Y%m%dT%H%M%S")
             elif k == "LOCATION":
                 v = v.replace(",", "\,")
 
@@ -140,6 +138,10 @@ class CalendarCore:
             if not package.endswith(".ics"):
                 raise TypeError("Unsupported file format")
 
+        global file_tz
+        self.timezone = get_localzone()
+        file_tz = self.timezone
+
         self.file = None
         self.fail = 0
         self.location = ""
@@ -169,7 +171,8 @@ class CalendarCore:
         str
             String conversion of the class
         """
-        ret = "BEGIN:VCALENDAR\nPRODID:-//Team Oak Tree Flakes//Event Planner v0.2//EN\nVERSION:2.0\n\n"
+        ret = "BEGIN:VCALENDAR\nPRODID:-//Team Oak Tree Flakes//Event Planner v0.5//EN\nVERSION:2.0\n" \
+              f"X-WR-TIMEZONE:{self.timezone}\n\n"
 
         for i in self.data:
             ret += f"{i}\n"
@@ -214,11 +217,15 @@ class CalendarCore:
                     # only executes if the line isn't empty and after BEGIN:VEVENT
                     if not (i.startswith("DT") and i.find(";") != -1):
                         if i.find(":") != -1:
-                            temp = i.split(':')
+                            temp = i.split(':', 1)
                             temp_event[temp[0]] = temp[1]
                     else:
                         temp = i.split(';')
                         temp_event[temp[0]] = temp[1].split(":")
+                else:
+                    temp = i.split(":", 1)
+                    if temp[0] == "X-WR-TIMEZONE":
+                        self.timezone = pytz.timezone(temp[1])
 
             if i == "END:VCALENDAR":
                 # EOF indicator

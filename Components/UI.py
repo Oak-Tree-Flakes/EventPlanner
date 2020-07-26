@@ -333,7 +333,7 @@ class EventUI:
         self.preset()
         # Build window appearance
         self.root = Toplevel(self.previous)
-        self.root.title("Add New Event" if not isinstance(self.inputs, VEvent) else "Edit Event")
+        self.root.title("Add New Event" if not isinstance(self.event_ref, VEvent) else f"Edit Event")
         self.root.grab_set()
         self.root.minsize(width=430, height=730)
         self.bgf = Frame(self.root, bg=self.bg)

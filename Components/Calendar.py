@@ -37,6 +37,19 @@ class VEvent:
         self.update(pack)
 
     def update(self, data: dict):
+        """
+        Method to update self.data within VEvent
+
+        Parameters
+        ----------
+        data: dict
+            pass in dictionary data for updating self.data
+
+        Raises
+        ------
+        TypeError
+            if dictionary from parameter don't contain enough data
+        """
         self.data.clear()
 
         for key, value in data.items():

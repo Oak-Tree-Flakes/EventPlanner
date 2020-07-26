@@ -1,9 +1,9 @@
 import datetime
 from tkinter import *
 from tkcalendar import DateEntry
-from Components.Calendar import CalendarCore, VEvent
-from tkinter import filedialog, messagebox, font
 from tzlocal import get_localzone
+from tkinter import filedialog, messagebox, font
+from Components.Calendar import CalendarCore, VEvent
 
 core = None
 
@@ -28,6 +28,25 @@ def to_datetime(arr: iter):
 
 
 def date_and_time_inputs(frame: LabelFrame, row: int, hour: int, exist: datetime.datetime = None):
+    """
+    Function that takes in the passed in LabelFrame and append date and time input onto the frame
+
+    Parameters
+    ----------
+    frame: LabelFrame
+        label frame to append the inputs to
+    row: int
+        row location for the date and time inputs
+    hour: int
+        default hour input if any
+    exist: datetime.datetime
+        existing datetime to assign to the date and time input on start
+
+    Returns
+    -------
+    list
+        input in the order of [DateEntry, Spinbox...]
+    """
     if not exist:
         date_input = DateEntry(frame, width=10, borderwidth=2, background="#f1c40f")
     else:
@@ -171,7 +190,23 @@ class Interface:
 
 
 class EventUI:
+    """
+    UI class for create or edit event
+    """
+
     def __init__(self, previous: Tk, reload: classmethod, exist_data: VEvent = None):
+        """
+        Constructor for EventUI class
+
+        Parameters
+        ----------
+        previous
+            the previous Tk window
+        reload: classmethod
+            the method for refreshing information display for the last window
+        exist_data: VEvent
+            the data for edit, if none then new data will be appended to core global variable
+        """
         self.font_family = "Open Sans"
         self.event_ref = exist_data
         self.inputs = {}
@@ -255,7 +290,7 @@ class EventUI:
                         temporary.append(k)
                 if len(temporary) == 0:
                     return messagebox.showerror(f"Failed to {word} Event", "For recurring weekly type event, "
-                                                                          "make sure at least one weekday is selected")
+                                                                           "make sure at least one weekday is selected")
                 part = ",".join(temporary)
                 append.append(f"BYDAY={part}")
             if check in ["MONTHLY, YEARLY"]:
@@ -293,8 +328,11 @@ class EventUI:
         self.reload()
 
     def preset(self):
+        """
+        Method to setup all the inputs in rrule, inputs
+        """
+        # this could be moved inside the generate method instead
         data1 = self.event_ref.data if self.event_ref else {}
-        # TODO process VEvent file
         for key, var, default in [("SUMMARY", StringVar, "New Event"), ("CLASS", StringVar, "PRIVATE"),
                                   ("PRIORITY", IntVar, 0), ("STATUS", StringVar, "CONFIRMED"),
                                   ("LOCATION", StringVar, "")]:
@@ -330,6 +368,9 @@ class EventUI:
             self.rrule_end_mode.set(2)
 
     def generate(self):
+        """
+        Method for generating the Toplevel window with all the inputs UI for user to create or modify event
+        """
         self.preset()
         # Build window appearance
         self.root = Toplevel(self.previous)
@@ -405,6 +446,9 @@ class EventUI:
                text="Update" if self.event_ref else "Create").grid(row=9, column=0)
 
     def update_recur_display(self):
+        """
+        Method for updating the recurrence user input UI
+        """
         if not self.rec_label:
             return
 

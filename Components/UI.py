@@ -5,7 +5,6 @@ from Components.Calendar import CalendarCore, VEvent
 from tkinter import filedialog, messagebox, font
 from tzlocal import get_localzone
 
-
 core = None
 
 
@@ -28,21 +27,27 @@ def to_datetime(arr: iter):
     return get_localzone().localize(ret)
 
 
-def date_and_time_inputs(frame: LabelFrame, row: int, hour: int):
+def date_and_time_inputs(frame: LabelFrame, row: int, hour: int, exist: datetime.datetime = None):
+    if not exist:
+        date_input = DateEntry(frame, width=10, borderwidth=2, background="#f1c40f")
+    else:
+        date_input = DateEntry(frame, width=10, borderwidth=2, background="#f1c40f",
+                               year=exist.year, month=exist.month, day=exist.day)
+
     Label(frame, text='Date', background="#f1c40f").grid(row=row, column=0)
-    ret = [DateEntry(frame, width=10, borderwidth=2, background="#f1c40f")]
+    ret = [date_input]
     ret[0].grid(row=row, column=1, pady=6)
 
     Label(frame, text='Hour', background="#00cec9").grid(row=row, column=2)
-    ret.append(IntVar(frame, value=hour))
+    ret.append(IntVar(frame, hour if not exist else exist.hour))
     Spinbox(frame, from_=0, to=23, width=6, textvariable=ret[1]).grid(row=row, column=3)
 
     Label(frame, text='Minutes', background="#00cec9").grid(row=row, column=4)
-    ret.append(IntVar(frame))
+    ret.append(IntVar(frame, 0 if not exist else exist.minute))
     Spinbox(frame, from_=0, to=59, width=6, textvariable=ret[2]).grid(row=row, column=5)
 
     Label(frame, text='Seconds', background="#00cec9").grid(row=row, column=6)
-    ret.append(IntVar(frame))
+    ret.append(IntVar(frame, 0 if not exist else exist.second))
     Spinbox(frame, from_=0, to=59, width=6, textvariable=ret[3]).grid(row=row, column=7)
 
     return ret
@@ -166,8 +171,7 @@ class Interface:
 
 
 class EventUI:
-    def __init__(self, previous: Tk, reload: classmethod, exist_data: VEvent = None, key: int = None):
-        self.key = key
+    def __init__(self, previous: Tk, reload: classmethod, exist_data: VEvent = None):
         self.font_family = "Open Sans"
         self.event_ref = exist_data
         self.inputs = {}
@@ -179,8 +183,9 @@ class EventUI:
         self.bg = "#2bcbba"
         self.rec_label = None
         self.bgf = None
+        self.later_data = {}
 
-    def build_datetime_selector(self, row: int, title: str, start: int = 6):
+    def build_datetime_selector(self, row: int, title: str, start: int = 6, exist: datetime.datetime = None):
         """
         Generate label containing datetime input detectors base on passed information from the parameter
 
@@ -192,6 +197,8 @@ class EventUI:
             text for the label
         start: int
             start value for the "hour" part of the input, default 6
+        exist: datetime.datetime
+            existing time data if any
 
         Returns
         -------
@@ -202,13 +209,13 @@ class EventUI:
         hold = LabelFrame(self.bgf, text=title, background=self.bg,
                           font=font.Font(family=self.font_family, size=12, weight=font.BOLD))
         hold.grid(row=row, column=0, padx=10, pady=5)
-        ret = date_and_time_inputs(hold, 0, start)
+        ret = date_and_time_inputs(hold, 0, start, exist)
 
         return ret
 
-    def try_create(self):
+    def try_update(self):
         """
-        Method that will try generate a new VEvent data from user inputs
+        Method that will try generate a new or update VEvent data from user inputs
 
         Returns
         -------
@@ -221,6 +228,8 @@ class EventUI:
         global core
         feed = {}
 
+        word = "create" if not self.event_ref else "update"
+
         try:
             for k, v in self.inputs.items():
                 if k.startswith("DT"):
@@ -230,7 +239,7 @@ class EventUI:
                 else:
                     feed[k] = v.get()
         except ValueError:
-            return messagebox.showerror("Failed to Create Event",
+            return messagebox.showerror(f"Failed to {word} Event",
                                         "Please check your input, it's beyond acceptable number range")
 
         if self.rrule["FREQ"].get() != "NEVER":
@@ -245,7 +254,7 @@ class EventUI:
                     if v.get() == 1:
                         temporary.append(k)
                 if len(temporary) == 0:
-                    return messagebox.showerror("Failed to Create Event", "For recurring weekly type event, "
+                    return messagebox.showerror(f"Failed to {word} Event", "For recurring weekly type event, "
                                                                           "make sure at least one weekday is selected")
                 part = ",".join(temporary)
                 append.append(f"BYDAY={part}")
@@ -264,40 +273,61 @@ class EventUI:
             feed["RRULE"] = ";".join(append)
 
         try:
-            temp = VEvent(feed)
+            if not self.event_ref:
+                temp = VEvent(feed)
+                if core:
+                    core.data.append(temp)
+                else:
+                    core = CalendarCore([temp])
+            else:
+                self.event_ref.update(feed)
         except TypeError:
             return \
-                messagebox.showerror("Failed to Create Event", "Please check your input, it's missing key details")
+                messagebox.showerror(f"Failed to {word} Event", "Please check your input, it's missing key details")
         except AssertionError:
-            return messagebox.showerror("Failed to Create Event", "Event Start time is later than event end time")
+            return messagebox.showerror(f"Failed to {word} Event", "Event Start time is later than event end time")
 
-        if core:
-            core.data.append(temp)
-        else:
-            core = CalendarCore([temp])
-
-        if self.root:
+        if self.root and not self.event_ref:
             self.root.destroy()
-        messagebox.showinfo("Successfully Created Event", f"{feed['SUMMARY']} has been successfully created")
+        messagebox.showinfo(f"Successfully {word}d event", f"{feed['SUMMARY']} has been successfully {word}d")
         self.reload()
 
     def preset(self):
+        data1 = self.event_ref.data if self.event_ref else {}
         # TODO process VEvent file
-        self.inputs["SUMMARY"] = StringVar(value="New Event")
-        self.inputs["CLASS"] = StringVar(value="PRIVATE")
-        self.inputs["PRIORITY"] = IntVar(value=0)
-        self.inputs["STATUS"] = StringVar(value="CONFIRMED")
-        self.inputs["LOCATION"] = StringVar()
+        for key, var, default in [("SUMMARY", StringVar, "New Event"), ("CLASS", StringVar, "PRIVATE"),
+                                  ("PRIORITY", IntVar, 0), ("STATUS", StringVar, "CONFIRMED"),
+                                  ("LOCATION", StringVar, "")]:
+            self.inputs[key] = var(value=data1[key] if key in data1 else default)
+        self.later_data["info"] = data1["DESCRIPTION"] if "DESCRIPTION" in data1 else ""
+        self.later_data["before"] = None if not self.event_ref else data1["DTSTART"]
+        self.later_data["after"] = None if not self.event_ref else data1["DTEND"]
 
-        self.rrule["FREQ"] = StringVar(value="NEVER")
-        self.rrule["INTERVAL"] = IntVar(value=1)
+        data2 = {"BYDAY": []}
+        if self.event_ref:
+            if "RRULE" in self.event_ref.data:
+                temp = self.event_ref.data["RRULE"].split(";")
+                for i in temp:
+                    temp2 = i.split("=")
+                    if temp2[0] == "BYDAY":
+                        data2["BYDAY"] = temp2[1].split(",")
+                    else:
+                        data2[temp2[0]] = temp2[1]
+
+        self.rrule["FREQ"] = StringVar(value=data2["FREQ"] if "FREQ" in data2 else "NEVER")
+        self.rrule["INTERVAL"] = IntVar(value=data2["INTERVAL"] if "INTERVAL" in data2 else 1)
         self.rrule["BYDAY"] = {}
         for i in ["SU", "MO", "TU", "WE", "TH", "FR", "SA"]:
-            self.rrule["BYDAY"][i] = IntVar()
-        self.rrule["COUNT"] = IntVar(value=1)
-        self.rrule["BYMONTHDAY"] = datetime.datetime.now().day
-        self.rrule["BYMONTH"] = datetime.datetime.now().month
-        self.rrule["UNTIL"] = StringVar(value=datetime.datetime.now().strftime("%Y/%m/%d"))
+            self.rrule["BYDAY"][i] = IntVar(value=1 if i in data2["BYDAY"] else 0)
+        self.rrule["COUNT"] = IntVar(value=data2["COUNT"] if "COUNT" in data2 else 1)
+        self.rrule["BYMONTHDAY"] = data2["BYMONTHDAY"] if "BYMONTHDAY" in data2 else datetime.datetime.now().day
+        self.rrule["BYMONTH"] = data2["BYMONTH"] if "BYMONTH" in data2 else datetime.datetime.now().month
+        self.rrule["UNTIL"] = StringVar(value=data2["UNTIL"] if "UNTIL" in data2 else
+                                        datetime.datetime.now().strftime("%Y/%m/%d"))
+        if "COUNT" in data2:
+            self.rrule_end_mode.set(1)
+        if "UNTIL" in data2:
+            self.rrule_end_mode.set(2)
 
     def generate(self):
         self.preset()
@@ -314,8 +344,8 @@ class EventUI:
         name_label.grid(row=0, column=0, sticky=W, padx=10)
         Entry(name_label, width=66, textvariable=self.inputs["SUMMARY"]).grid(row=0, column=1)
         # ------------------------------------------------------------------------------------------------
-        self.inputs["DTSTART"] = self.build_datetime_selector(1, "Start Date and Time *", 8)
-        self.inputs["DTEND"] = self.build_datetime_selector(2, "End Data and Time *", 10)
+        self.inputs["DTSTART"] = self.build_datetime_selector(1, "Start Date and Time *", 8, self.later_data["before"])
+        self.inputs["DTEND"] = self.build_datetime_selector(2, "End Data and Time *", 10, self.later_data["after"])
         # ------------------------------------------------------------------------------------------------
         ref_frame = LabelFrame(self.bgf, text="Recurrence", background=self.bg, font=font.Font(
             family="Open Sans", size=12, weight=font.BOLD))
@@ -330,6 +360,7 @@ class EventUI:
             i += 1
         self.rec_label = Frame(ref_frame, bg=self.bg)
         self.rec_label.grid(row=1, column=0)
+        self.update_recur_display()
         # ------------------------------------------------------------------------------------------------
         class_label = LabelFrame(self.bgf, text="Event Type", background=self.bg,
                                  font=font.Font(family=self.font_family, size=12, weight=font.BOLD))
@@ -367,11 +398,11 @@ class EventUI:
                                 font=font.Font(family=self.font_family, size=12, weight=font.BOLD))
         info_label.grid(row=8, column=0, sticky=W, padx=10)
         self.inputs["DESCRIPTION"] = Text(info_label, width=50, height=10)
+        self.inputs["DESCRIPTION"].insert(INSERT, self.later_data["info"])
         self.inputs["DESCRIPTION"].grid(row=0, column=1)
         # ------------------------------------------------------------------------------------------------
-        if not isinstance(self.inputs, VEvent):
-            Button(self.bgf, padx=10, pady=0, command=self.try_create, text="Create").grid(row=9, column=0)
-        # TODO: when implementing edit event, change values within the user input boxes (there is a lot)
+        Button(self.bgf, padx=10, pady=0, command=self.try_update,
+               text="Update" if self.event_ref else "Create").grid(row=9, column=0)
 
     def update_recur_display(self):
         if not self.rec_label:

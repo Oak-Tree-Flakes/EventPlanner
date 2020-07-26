@@ -34,8 +34,12 @@ class VEvent:
         """
         self.data = {}
         self.recur = False
-        for key, value in pack.items():
+        self.update(pack)
 
+    def update(self, data: dict):
+        self.data.clear()
+
+        for key, value in data.items():
             if isinstance(value, str):
                 if key.startswith("DT"):
                     if value.endswith("Z"):

@@ -257,9 +257,6 @@ class EventUI:
         messagebox
             if there is error
         """
-        if isinstance(self.inputs, VEvent):
-            return
-
         global core
         feed = {}
 
@@ -277,6 +274,7 @@ class EventUI:
             return messagebox.showerror(f"Failed to {word} Event",
                                         "Please check your input, it's beyond acceptable number range")
 
+        # fetch and form proper RRULE
         if self.rrule["FREQ"].get() != "NEVER":
             check = self.rrule["FREQ"].get()
             append = [f"FREQ={check}"]
@@ -307,6 +305,7 @@ class EventUI:
 
             feed["RRULE"] = ";".join(append)
 
+        # attempt to create or update VEvent
         try:
             if not self.event_ref:
                 temp = VEvent(feed)
@@ -322,6 +321,7 @@ class EventUI:
         except AssertionError:
             return messagebox.showerror(f"Failed to {word} Event", "Event Start time is later than event end time")
 
+        # pop up window
         if self.root and not self.event_ref:
             self.root.destroy()
         messagebox.showinfo(f"Successfully {word}d event", f"{feed['SUMMARY']} has been successfully {word}d")
@@ -341,6 +341,7 @@ class EventUI:
         self.later_data["before"] = None if not self.event_ref else data1["DTSTART"]
         self.later_data["after"] = None if not self.event_ref else data1["DTEND"]
 
+        # recurrence event inputs
         data2 = {"BYDAY": []}
         if self.event_ref:
             if "RRULE" in self.event_ref.data:
@@ -362,6 +363,7 @@ class EventUI:
         self.rrule["BYMONTH"] = data2["BYMONTH"] if "BYMONTH" in data2 else datetime.datetime.now().month
         self.rrule["UNTIL"] = StringVar(value=data2["UNTIL"] if "UNTIL" in data2 else
                                         datetime.datetime.now().strftime("%Y/%m/%d"))
+        # count < until if both happen to be in VEvent data for some reason
         if "COUNT" in data2:
             self.rrule_end_mode.set(1)
         if "UNTIL" in data2:
@@ -371,8 +373,10 @@ class EventUI:
         """
         Method for generating the Toplevel window with all the inputs UI for user to create or modify event
         """
+        # prepare all "vars" if applicable
         self.preset()
-        # Build window appearance
+
+        # Build window appearance starts here
         self.root = Toplevel(self.previous)
         self.root.title("Add New Event" if not isinstance(self.event_ref, VEvent) else f"Edit Event")
         self.root.grab_set()
@@ -459,6 +463,7 @@ class EventUI:
         self.rec_label = Frame(temp, bg=self.bg)
         self.rec_label.grid(row=1, column=0)
 
+        # case for "never" being selected on the option of recurrence menu
         if guide == "NEVER":
             return
 
@@ -486,7 +491,9 @@ class EventUI:
         Label(grid3, text='Ends:', background=self.bg).grid(row=0, column=0)
         note = []
 
+        # ---------------------------------------------------------------------------------------------------------
         def change():
+            # updating "Ends" part of the recurrence selectors
             for item in note:
                 item.destroy()
             note.clear()
@@ -500,6 +507,7 @@ class EventUI:
                 note.append(DateEntry(grid3, width=10, borderwidth=2, background="#f1c40f",
                                       date_pattern='y/mm/dd', textvariable=self.rrule["UNTIL"]))
                 note[0].grid(row=0, column=i)
+        # ---------------------------------------------------------------------------------------------------------
 
         i = 1
         for a, b in [("Never", 0), ("After", 1), ("On", 2)]:

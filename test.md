@@ -2,10 +2,11 @@ TEST CASES
 
 Step 1. 
     
-    Action: select "New Event"  
-    Expected Result: new window pop up with following options - Event Name, 
-        Start Date and Time, End Date and Time, Event Information, 
-        Event Description, and a Create button
+    Action: select "Edit" then click "New Event"
+    Expected Result: new window pop up with following options - 
+        Event Name, Start Date and Time, End Date and Time, Recurrence,
+        Event Type, Event Priority, Event Status, Location, Description
+        and a Create button
     
 Step 2. 
     
@@ -31,34 +32,42 @@ Step 4.
     
 Step 5.
 
-    Action: set the file to save to some part of the computer then 
-        click "save"
-    Expected Result: The related file is created in the location allocated
+    Action: set the file to save to some part of the computer call it 
+        "test" then click "Save"
+    Expected Result: A file named "test" is created in the location 
+        allocated
 
 Step 6.
+
+    Action: import the "test.ics" file to calendar program
+    Expected Result: All information set within the test file is 
+        displayed within the calendar program
+
+Step 7.
 
     Action: close then reopen program
     Expected Result: page has no event data listed
     
-Step 7.
+Step 8.
 
     Action: click "Load File" and select the .ics file we just created 
     Expected Result: the test event's information is displayed
     
-Step 8. 
+Step 9. 
     
-    Action: select "New Event" 
-    Expected Result: new window pop up with following options - Event Name, 
-        Start Date and Time, End Date and Time, Event Information, 
-        Event Description, and a Create button
+    Action: select "Edit" then click "New Event" 
+    Expected Result: new window pop up with following options - 
+        Event Name, Start Date and Time, End Date and Time, Recurrence,
+        Event Type, Event Priority, Event Status, Location, Description
+        and a Create button
 
-Step 9.
+Step 10.
 
     Action: input nothing, then click "Create"
     Expected result: window pop up, informing of failed event creation
         due to input missing key details
         
-Step 10.
+Step 11.
 
     Action: input the following
             Event Name: Test 2
@@ -68,7 +77,7 @@ Step 10.
     Expected Result: window pop up informing of failed event creation due 
         to starting event time being after the ending event time
 
-Step 11. 
+Step 12. 
 
     Action: change the Start Date and Time: 8/15/2020, 8:10:10
             change the End Date and Time: 8/15/2020, 6:10:10
@@ -76,7 +85,7 @@ Step 11.
     Expected Result: window pop up informing of failed event creation due 
         to starting event time being after the ending event time
         
-Step 12.
+Step 13.
 
     Action: change the Start Date and Time: 8/15/2020, 8:10:10
             change the End Date and Time: 8/15/2020, 8:09:10
@@ -84,7 +93,7 @@ Step 12.
     Expected Result: window pop up informing of failed event creation due 
         to starting event time being after the ending event time
     
-Step 13.
+Step 14.
 
     Action: change the Start Date and Time: 8/15/2020, 8:10:10
             change the End Date and Time: 8/15/2020, 8:10:09
@@ -92,15 +101,56 @@ Step 13.
     Expected Result: window pop up informing of failed event creation due 
         to starting event time being after the ending event time
         
-Step 14.
+Step 15.
 
     Action: change the Start Date and Time: 8/15/2020, 8:10:10
             change the End Date and Time: 8/15/2020, 8:10:10
         the click "Create"
     Expected Result: window pop up informing successful event creation 
-Step 15.     
+    
+Step 16.     
     
     Action: click "ok" on window
     Expected Result: the event can be seen with the other events, 
         location and description fields are empty
+        
+Step 17.
+
+    Action: select "File" and click "save"
+    Expected Result: The new information is updated within the file 
+        
+Step 18.
+
+    Action: import test.ics file to calendar program
+    Expected Result: All information set within the test file is 
+        displayed within the calendar program
+        
+Step 19.
+        
+    Action: select "Edit" then click "New Event" 
+    Expected Result: new window pop up with following options - 
+        Event Name, Start Date and Time, End Date and Time, Recurrence,
+        Event Type, Event Priority, Event Status, Location, Description
+        and a Create button
     
+Step 20. 
+    
+    Action: input the following
+            Event Name: Test 3
+            Start Date and Time: 9/20/2020, 10:30:30
+            End Date and Time: 9/20/2020, 11:40:20
+            Recurrence: Daily
+            Event Type: Public
+            Event Priority: High
+            Event Status: Cancelled
+Step 21.
+
+    Action: select "File" and click "save"
+    Expected Result: The new information is updated within the file        
+
+Step 22. 
+
+    Action: import test.ics file to calendar program
+    Expected Result: All information set within the test file is 
+        displayed within the calendar program, and most current event 
+        is cancelled

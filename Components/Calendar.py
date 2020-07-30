@@ -75,6 +75,10 @@ class VEvent:
         if self.data["DTSTART"] > self.data["DTEND"]:
             raise AssertionError("Event end time can not be before the event start time")
 
+        if "UID" not in self.data:
+            temp = f'{datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")}>{self.data["SUMMARY"]}'
+            self.data["UID"] = f"{temp}@oaktreeEPlanner.com"
+
     def check(self):
         """
         Method that checks whether or not the current data is a valid form of VEvent
@@ -102,7 +106,18 @@ class VEvent:
         str
             String conversion of the class
         """
+        return self.stringify()
+
+    def __repr__(self):
+        # TODO: here only for temporary visualization within console, remove when done
+        return self.stringify(datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ"))
+
+    def stringify(self, stamp: str = None):
         ret = "BEGIN:VEVENT\n"
+
+        if stamp and "DTSTAMP" not in self.data:
+            ret += f"DTSTAMP:{stamp}\n"
+
         for k, v in self.data.items():
             if k.startswith("DT"):
                 v = v.strftime("%Y%m%dT%H%M%SZ" if v.tzinfo == pytz.UTC else "%Y%m%dT%H%M%S")
@@ -115,9 +130,11 @@ class VEvent:
 
         return ret
 
-    def __repr__(self):
-        # TODO: here only for visualization within console, remove when done
-        return self.__str__()
+    def __lt__(self, other):
+        return self.data["DTSTART"] < other.data["DTSTART"]
+
+    def __eq__(self, other):
+        return self.data["DTSTART"] == other.data["DTSTART"]
 
 
 class CalendarCore:
@@ -270,6 +287,16 @@ class CalendarCore:
 
         self.location = self.location if not file else file
         self.file = open(self.location, mode="w")
-        self.file.write(self.__str__())
+
+        now = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        write = "BEGIN:VCALENDAR\nPRODID:-//Team Oak Tree Flakes//Event Planner v0.5//EN\nVERSION:2.0\n" \
+              f"X-WR-TIMEZONE:{self.timezone}\n"
+
+        for i in self.data:
+            write += f"{i.stringify(now)}"
+
+        write += "END:VCALENDAR\n"
+
+        self.file.write(write)
         self.file.close()
         self.file = open(self.location)

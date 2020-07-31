@@ -1,6 +1,9 @@
 import pytz
 import typing
 import datetime
+from tzlocal import get_localzone
+
+file_tz = get_localzone()
 
 
 class VEvent:
@@ -11,6 +14,8 @@ class VEvent:
     ----------
     data: dict
         dictionary storing data for an VEvent Object
+    recur: bool
+        whether or not the Event is a recurrence one
     """
 
     def __init__(self, pack: dict):
@@ -28,15 +33,51 @@ class VEvent:
             if dictionary from parameter don't contain enough data
         """
         self.data = {}
-        for key, value in pack.items():
+        self.recur = False
+        self.update(pack)
 
-            if isinstance(value, str) and key.startswith("DT") and value.endswith("Z"):
-                self.data[key] = pytz.utc.localize(datetime.datetime.strptime(value, "%Y%m%dT%H%M%SZ"))
+    def update(self, data: dict):
+        """
+        Method to update self.data within VEvent
+
+        Parameters
+        ----------
+        data: dict
+            pass in dictionary data for updating self.data
+
+        Raises
+        ------
+        TypeError
+            if dictionary from parameter don't contain enough data
+        """
+        self.data.clear()
+
+        for key, value in data.items():
+            if isinstance(value, str):
+                if key.startswith("DT"):
+                    if value.endswith("Z"):
+                        self.data[key] = pytz.UTC.localize(datetime.datetime.strptime(value, "%Y%m%dT%H%M%SZ"))
+                    else:
+                        global file_tz
+                        self.data[key] = file_tz.localize(datetime.datetime.strptime(value, "%Y%m%dT%H%M%S"))
+                elif key == "LOCATION":
+                    self.data[key] = value.replace("\,", ",")
+                else:
+                    self.data[key] = value
             else:
+                if key == "RRULE":
+                    self.recur = True
                 self.data[key] = value
 
         if not self.check():
-            raise TypeError("Illegal VEvent")
+            raise TypeError("Illegal VEvent: Missing required entry")
+
+        if self.data["DTSTART"] > self.data["DTEND"]:
+            raise AssertionError("Event end time can not be before the event start time")
+
+        if "UID" not in self.data:
+            temp = f'{datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")}>{self.data["SUMMARY"]}'
+            self.data["UID"] = f"{temp}@oaktreeEPlanner.com"
 
     def check(self):
         """
@@ -65,18 +106,35 @@ class VEvent:
         str
             String conversion of the class
         """
+        return self.stringify()
+
+    def __repr__(self):
+        # TODO: here only for temporary visualization within console, remove when done
+        return self.stringify(datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ"))
+
+    def stringify(self, stamp: str = None):
         ret = "BEGIN:VEVENT\n"
+
+        if stamp and "DTSTAMP" not in self.data:
+            ret += f"DTSTAMP:{stamp}\n"
+
         for k, v in self.data.items():
             if k.startswith("DT"):
-                v = v.strftime("%Y%m%dT%H%M%SZ")
-            ret += f"{k}:{v}\n"
+                v = v.strftime("%Y%m%dT%H%M%SZ" if v.tzinfo == pytz.UTC else "%Y%m%dT%H%M%S")
+            elif k == "LOCATION":
+                v = v.replace(",", "\,")
+
+            if v not in ["", "\n"]:
+                ret += f"{k}:{v}\n"
         ret += "END:VEVENT\n"
 
         return ret
 
-    def __repr__(self):
-        # TODO: here only for visualization within console, remove when done
-        return self.__str__()
+    def __lt__(self, other):
+        return self.data["DTSTART"] < other.data["DTSTART"]
+
+    def __eq__(self, other):
+        return self.data["DTSTART"] == other.data["DTSTART"]
 
 
 class CalendarCore:
@@ -104,7 +162,20 @@ class CalendarCore:
         package: typing.Union[str, list]
             if package is string, class will attempt to open the string as a file specification and scan it
             if package is list, it will be appended to data
+
+        Raises
+        ------
+        TypeError
+            if the passed in package string for the file location isn't supported
         """
+        if isinstance(package, str):
+            if not package.endswith(".ics"):
+                raise TypeError("Unsupported file format")
+
+        global file_tz
+        self.timezone = get_localzone()
+        file_tz = self.timezone
+
         self.file = None
         self.fail = 0
         self.location = ""
@@ -119,8 +190,11 @@ class CalendarCore:
         """
         Destructor of the CalendarCore class to close any lingering file the class have opened
         """
-        if self.file:
-            self.file.close()
+        try:
+            if self.file:
+                self.file.close()
+        except AttributeError:
+            pass
 
     def __str__(self):
         """
@@ -131,7 +205,8 @@ class CalendarCore:
         str
             String conversion of the class
         """
-        ret = "BEGIN:VCALENDAR\nPRODID:-//Team Oak Tree Flakes//Event Planner v0.1//EN\nVERSION:2.0\n\n"
+        ret = "BEGIN:VCALENDAR\nPRODID:-//Team Oak Tree Flakes//Event Planner v0.5//EN\nVERSION:2.0\n" \
+              f"X-WR-TIMEZONE:{self.timezone}\n\n"
 
         for i in self.data:
             ret += f"{i}\n"
@@ -174,9 +249,17 @@ class CalendarCore:
                     read_event = False
                 elif read_event and i not in ["", "BEGIN:VEVENT"]:
                     # only executes if the line isn't empty and after BEGIN:VEVENT
-                    if i.find(":") != -1:
-                        temp = i.split(':')
-                        temp_event[temp[0]] = temp[1]
+                    if not (i.startswith("DT") and i.find(";") != -1):
+                        if i.find(":") != -1:
+                            temp = i.split(':', 1)
+                            temp_event[temp[0]] = temp[1]
+                    else:
+                        temp = i.split(';')
+                        temp_event[temp[0]] = temp[1].split(":")
+                else:
+                    temp = i.split(":", 1)
+                    if temp[0] == "X-WR-TIMEZONE":
+                        self.timezone = pytz.timezone(temp[1])
 
             if i == "END:VCALENDAR":
                 # EOF indicator
@@ -204,6 +287,16 @@ class CalendarCore:
 
         self.location = self.location if not file else file
         self.file = open(self.location, mode="w")
-        self.file.write(self.__str__())
+
+        now = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        write = "BEGIN:VCALENDAR\nPRODID:-//Team Oak Tree Flakes//Event Planner v0.5//EN\nVERSION:2.0\n" \
+              f"X-WR-TIMEZONE:{self.timezone}\n"
+
+        for i in self.data:
+            write += f"{i.stringify(now)}"
+
+        write += "END:VCALENDAR\n"
+
+        self.file.write(write)
         self.file.close()
         self.file = open(self.location)

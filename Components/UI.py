@@ -3,7 +3,7 @@ from tkinter import *
 from tkcalendar import DateEntry
 from tzlocal import get_localzone
 from tkinter import filedialog, messagebox, font
-from Calendar import CalendarCore, VEvent
+from Components.Calendar import CalendarCore, VEvent
 
 core = None
 
@@ -130,8 +130,8 @@ class EventUI:
         ret = date_and_time_inputs(hold, 0, start, exist)
 
         return ret
-    
-    def Cancel(self):
+
+    def cancel(self):
         """
         Method that Cancel the event creation
 
@@ -141,10 +141,7 @@ class EventUI:
         """
         
         self.root.destroy()
-        
-        
-        
-        
+
     def try_update(self):
         """
         Method that will try generate a new or update VEvent data from user inputs
@@ -345,8 +342,8 @@ class EventUI:
         # ------------------------------------------------------------------------------------------------
         Button(self.bgf, padx=10, pady=0, command=self.try_update,
                text="Update" if self.event_ref else "Create").grid(row=9, column=0)
-        #--------------------------------------------------------------------------------------------------
-        Button(self.bgf, padx=10, pady=0, command=self.Cancel,
+        # ------------------------------------------------------------------------------------------------
+        Button(self.bgf, padx=10, pady=0, command=self.cancel,
                text="Cancel").grid(row=10, column=0)
 
     def update_recur_display(self):
@@ -536,17 +533,35 @@ class Interface:
         self.details.place(relx=0.5, rely=0.5, anchor=CENTER)
 
         if not isinstance(core, CalendarCore):
-            top = Frame(self.details)
+            top = Frame(self.details, bg=self.bg_color)
             top.grid(row=0, column=0)
             Label(self.details, font=("Comic Sans", 20), text="Select one of the following actions",
                   bg=self.bg_color).grid(row=0, column=0)
 
-            bottom = Frame(self.details)
-            bottom.grid(row=1, column=0)
-            Button(bottom, text="Load ICS File", command=self.get_file, width=10, height=3).pack()
+            bottom = Frame(self.details, bg=self.bg_color)
+            bottom.grid(row=1, column=0, pady=5)
+            Button(bottom, text="Load ICS File", command=self.get_file, width=10, height=3).grid(row=0, pady=5)
             Button(bottom, text="New Event", width=10, height=3,
-                   command=EventUI(self.root, self.reload_display).generate).pack()
+                   command=EventUI(self.root, self.reload_display).generate).grid(row=1, pady=5)
         else:
             core.data.sort()
-            temp = str(core)
-            Label(self.details, text=temp, fg="white", bg="black", justify=LEFT).grid(row=0, column=0)
+
+            contains = Frame(self.details, bg=self.bg_color)
+            contains.pack()
+
+            color = "#00cec9"
+
+            for i in range(len(core.data)):
+                ref = core.data[i]
+                card = Frame(contains, bg=color)
+                Label(card, font=("Comic Sans", 16), text=ref.data["SUMMARY"],
+                      bg=color).grid(row=0, column=0)
+                form = "%Y/%m/%d %H:%M"
+                local = core.timezone
+                time = f"{ref.data['DTSTART'].astimezone(local).strftime(form)} -> " \
+                       f"{ref.data['DTEND'].astimezone(local).strftime(form)}"
+                Label(card, font=("Comic Sans", 10), text=time,
+                      bg=color).grid(row=1, column=0)
+                Button(card, text="Edit", width=5, height=2,
+                       command=EventUI(self.root, self.reload_display, ref).generate).grid(row=0, column=1)
+                card.grid(pady=5, row=i, column=0)

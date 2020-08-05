@@ -3,7 +3,7 @@ from tkinter import *
 from tkcalendar import DateEntry
 from tzlocal import get_localzone
 from tkinter import filedialog, messagebox, font
-from Components.Calendar import CalendarCore, VEvent
+from Calendar import CalendarCore, VEvent
 
 core = None
 
@@ -130,7 +130,21 @@ class EventUI:
         ret = date_and_time_inputs(hold, 0, start, exist)
 
         return ret
+    
+    def Cancel(self):
+        """
+        Method that Cancel the event creation
 
+        Returns
+        -------
+        
+        """
+        
+        self.root.destroy()
+        
+        
+        
+        
     def try_update(self):
         """
         Method that will try generate a new or update VEvent data from user inputs
@@ -331,6 +345,9 @@ class EventUI:
         # ------------------------------------------------------------------------------------------------
         Button(self.bgf, padx=10, pady=0, command=self.try_update,
                text="Update" if self.event_ref else "Create").grid(row=9, column=0)
+        #--------------------------------------------------------------------------------------------------
+        Button(self.bgf, padx=10, pady=0, command=self.Cancel,
+               text="Cancel").grid(row=10, column=0)
 
     def update_recur_display(self):
         """

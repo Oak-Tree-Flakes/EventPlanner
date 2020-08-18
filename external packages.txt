@@ -1,3 +1,0 @@
-pip install tkcalendar
-pip install pytz
-pip install tzlocal
